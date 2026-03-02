@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎬 JOB RUNNER — VikiLeads v2.5.1
+// 🎬 JOB RUNNER — VikiLeads v2.6.0
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // FLOW (per page):
@@ -7,13 +7,13 @@
 //   2. Activate Lusha + ZoomInfo (parallel — triggers API calls)
 //   3. Wait for scroll + network responses (ZoomInfo + Lusha via CDP)
 //   4. Minimize sidebars
-//   5. Merge all 3 sources (network captured)
+//   5. Merge: Sales Nav (BASE) + ZoomInfo (ENRICH) + Lusha (ENRICH)
 //   6. Save JSONL + generate CSV/XLSX
 //   7. Navigate to next page
 //
-// v2.5.1: Browser CDP for Lusha service worker capture
-//         Steady scroll (no random pauses)
-//         Longer Lusha wait (up to 8s + retry)
+// v2.6.0: Sales Nav is now the BASE record source (not ZoomInfo).
+//         ZoomInfo enriches/replaces Sales Nav data where it has values.
+//         Fixes name credential issue (e.g. "Griner, PharmD, MBA...")
 // ═══════════════════════════════════════════════════════════════════════════════
 
 process.env.PW_CHROMIUM_ATTACH_TO_OTHER = '1';
@@ -60,7 +60,7 @@ const { PageTracker }               = require('./tasks/pageTracker');
 
     try {
         console.log('══════════════════════════════════════════');
-        console.log('🚀 JOB STARTING — VikiLeads v2.5.1');
+        console.log('🚀 JOB STARTING — VikiLeads v2.6.0');
         console.log(`📎 URL: ${JOB_URL.slice(0, 80)}...`);
         console.log(`📂 Output: ${JOB_DIR}`);
         if (START_PAGE > 0) console.log(`♻️ Resuming from page ${START_PAGE}`);
@@ -123,6 +123,19 @@ const { PageTracker }               = require('./tasks/pageTracker');
             // ══════════════════════════════════════════════════════════
             console.log('⚡ [Step 2] Waiting for network responses...');
 
+            // ── Sales Nav wait (should already be captured from page load) ──
+            // Sales Nav response comes from the page itself, usually captured
+            // during scroll. Give it a quick poll just in case.
+            let snReady = captureStore.getSalesNavRecords().length > 0;
+            if (!snReady) {
+                for (let w = 0; w < 6; w++) {
+                    await page.waitForTimeout(500);
+                    if (captureStore.getSalesNavRecords().length > 0) { snReady = true; break; }
+                }
+                if (snReady) console.log('✅ Sales Nav data available');
+                else console.log('⚠️ Sales Nav data not captured — will use ZoomInfo only');
+            } else { console.log('✅ Sales Nav data available'); }
+
             // ── ZoomInfo wait (poll 500ms × 8 = 4s, then retry + 3s) ──
             let ziReady = captureStore.getCurrent().zoominfo.length > 0;
             if (!ziReady) {
@@ -145,7 +158,6 @@ const { PageTracker }               = require('./tasks/pageTracker');
             // ── Lusha wait (longer: poll 500ms × 16 = 8s, then retry + 6s) ──
             let luReady = captureStore.getCurrent().lusha.length > 0;
             if (!luReady) {
-                // First wait — up to 8s (CDP capture may take longer)
                 for (let w = 0; w < 16; w++) {
                     await page.waitForTimeout(500);
                     if (captureStore.getCurrent().lusha.length > 0) { luReady = true; break; }
@@ -155,7 +167,6 @@ const { PageTracker }               = require('./tasks/pageTracker');
                     await minimizeLusha(page);
                     await page.waitForTimeout(500);
                     await activateLusha(page);
-                    // Second wait — up to 6s
                     for (let w = 0; w < 12; w++) {
                         await page.waitForTimeout(500);
                         if (captureStore.getCurrent().lusha.length > 0) { luReady = true; break; }
@@ -176,6 +187,7 @@ const { PageTracker }               = require('./tasks/pageTracker');
 
             // ── Page tracker ──────────────────────────────────────────
             tracker.pageExtracted(pageNum, {
+                sn:    captureStore.getSalesNavRecords().length,
                 zi:    captureStore.getCurrent().zoominfo.length,
                 lusha: captureStore.getCurrent().lusha.length,
             });
@@ -183,11 +195,13 @@ const { PageTracker }               = require('./tasks/pageTracker');
             // ══════════════════════════════════════════════════════════
             // STEP 4: Merge + Save
             // ══════════════════════════════════════════════════════════
+            const salesNavRecs = captureStore.getSalesNavRecords();
             const salesNavLocs = captureStore.getSalesNavLocations();
 
             const pageData = {
                 zoominfo:          captureStore.getCurrent().zoominfo,
                 lusha:             captureStore.getCurrent().lusha,
+                salesNavRecords:   salesNavRecs,
                 salesNavLocations: salesNavLocs,
             };
 
@@ -198,8 +212,8 @@ const { PageTracker }               = require('./tasks/pageTracker');
                 const lines = merged.map(r => JSON.stringify(r)).join('\n') + '\n';
                 fs.appendFileSync(LEADS_JSONL, lines);
                 console.log(`💾 Appended ${merged.length} leads`);
-            } else if (captureStore.getCurrent().zoominfo.length === 0) {
-                tracker.pageSkipped(pageNum, 'no ZoomInfo data — page will be missed');
+            } else if (salesNavRecs.length === 0 && captureStore.getCurrent().zoominfo.length === 0) {
+                tracker.pageSkipped(pageNum, 'no Sales Nav or ZoomInfo data — page will be missed');
             }
 
             const totalLeads = await generateCSV(LEADS_JSONL, LEADS_CSV);

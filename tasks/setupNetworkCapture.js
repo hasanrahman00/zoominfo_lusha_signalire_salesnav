@@ -1,25 +1,28 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TASK: Setup Network Capture — ZoomInfo + Lusha + Sales Nav (v2.5.1)
+// TASK: Setup Network Capture — ZoomInfo + Lusha + Sales Nav (v2.6.0)
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// v2.6.0 CHANGES:
+//   - Sales Nav parser now extracts FULL records (not just locations)
+//   - New fields: about, premium, degree, position details, tenure
+//   - captureStore now has `_latestSalesNavRecords` for full records
+//   - `_latestSalesNav` (locations) kept for backward compat
 //
 // ZoomInfo   → page.on('response')              → works (iframe fetch)
 // Lusha      → browser CDP auto-attach           → captures service worker traffic
 // Sales Nav  → page.on('response')              → works (same-page request)
-//
-// WHY BROWSER CDP:
-//   Lusha extension routes API calls through its service worker (MV3).
-//   Playwright's page.on('response') only sees page/iframe requests.
-//   Browser CDP auto-attach lets us intercept ALL Chrome network traffic.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const config = require('../config');
 const { cleanName } = require('./nameCleaner');
+const { parseLocation } = require('./enrichLocation');
 
 async function setupNetworkCapture(context, browser) {
     const captureStore = {
         pages: {},
         currentPage: 1,
         _latestSalesNav: [],
+        _latestSalesNavRecords: [],      // ← NEW: full parsed records
 
         getCurrent() {
             if (!this.pages[this.currentPage]) {
@@ -39,6 +42,10 @@ async function setupNetworkCapture(context, browser) {
 
         getSalesNavLocations() {
             return this._latestSalesNav;
+        },
+
+        getSalesNavRecords() {
+            return this._latestSalesNavRecords;
         },
     };
 
@@ -88,28 +95,24 @@ async function setupNetworkCapture(context, browser) {
     // ═════════════════════════════════════════════════════════════════════
     try {
         const browserCDP = await browser.newBrowserCDPSession();
-        const attachedSessions = new Map();   // sessionId → targetInfo
-        const lushaRequests    = new Map();   // requestId → sessionId
-        const pendingBodies    = new Map();   // msgId → requestId
+        const attachedSessions = new Map();
+        const lushaRequests    = new Map();
+        const pendingBodies    = new Map();
 
-        // Auto-attach to all new targets (service workers, background pages, etc.)
         await browserCDP.send('Target.setAutoAttach', {
             autoAttach: true,
             waitForDebuggerOnStart: false,
             flatten: false,
         });
 
-        // ── When a target is attached, enable Network on it ──────────
         browserCDP.on('Target.attachedToTarget', ({ sessionId, targetInfo }) => {
             const type = targetInfo.type || '';
             const url  = targetInfo.url  || '';
 
-            // Attach to service workers, background pages, and anything Lusha-related
             if (type === 'service_worker' || type === 'background_page' || url.includes('lusha')) {
                 attachedSessions.set(sessionId, targetInfo);
                 console.log(`📡 [CDP] Attached: ${type} — ${url.slice(0, 80)}`);
 
-                // Enable Network monitoring on this target
                 browserCDP.send('Target.sendMessageToTarget', {
                     sessionId,
                     message: JSON.stringify({ id: 1, method: 'Network.enable', params: {} }),
@@ -117,14 +120,12 @@ async function setupNetworkCapture(context, browser) {
             }
         });
 
-        // ── Process messages from attached targets ───────────────────
         browserCDP.on('Target.receivedMessageFromTarget', ({ sessionId, message }) => {
             if (!attachedSessions.has(sessionId)) return;
 
             let msg;
             try { msg = JSON.parse(message); } catch { return; }
 
-            // ── Network.responseReceived → track Lusha request IDs ───
             if (msg.method === 'Network.responseReceived') {
                 const url    = msg.params?.response?.url || '';
                 const status = msg.params?.response?.status || 0;
@@ -135,7 +136,6 @@ async function setupNetworkCapture(context, browser) {
                 }
             }
 
-            // ── Network.loadingFinished → fetch the response body ────
             if (msg.method === 'Network.loadingFinished') {
                 const reqSessionId = lushaRequests.get(msg.params.requestId);
                 if (!reqSessionId) return;
@@ -154,7 +154,6 @@ async function setupNetworkCapture(context, browser) {
                 }).catch(() => pendingBodies.delete(msgId));
             }
 
-            // ── Response to our getResponseBody request ──────────────
             if (msg.id && pendingBodies.has(msg.id) && msg.result) {
                 pendingBodies.delete(msg.id);
                 try {
@@ -170,7 +169,6 @@ async function setupNetworkCapture(context, browser) {
             }
         });
 
-        // ── Also attach to already-running targets ───────────────────
         const { targetInfos } = await browserCDP.send('Target.getTargets');
         for (const t of targetInfos) {
             if (t.type === 'service_worker' || t.type === 'background_page' || (t.url && t.url.includes('lusha'))) {
@@ -194,7 +192,7 @@ async function setupNetworkCapture(context, browser) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PARSERS — same as before
+// PARSERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function parseZoomInfoResponse(body, store) {
@@ -260,7 +258,6 @@ function parseZoomInfoResponse(body, store) {
 
 function parseLushaResponse(body, store) {
     try {
-         // Lusha wraps contacts in body.data.contacts
         const contacts = Array.isArray(body) ? body
             : (body.data?.contacts || body.contacts || body.results || []);
         if (!Array.isArray(contacts)) return;
@@ -277,7 +274,6 @@ function parseLushaResponse(body, store) {
 
             const fullName = (item.fullName || `${firstName} ${lastName}`).trim();
 
-            // Extract domain from first valid email
             let domain = '';
             if (Array.isArray(item.emails)) {
                 for (const email of item.emails) {
@@ -291,10 +287,8 @@ function parseLushaResponse(body, store) {
                 }
             }
 
-            // LinkedIn URL from socialLink
             const personLinkedinUrl = (item.socialLink || '').trim();
 
-            // Deduplicate within page
             if (current.lusha.some(l => l.fullName === fullName)) continue;
 
             current.lusha.push({ firstName, lastName, fullName, domain, personLinkedinUrl });
@@ -310,22 +304,81 @@ function parseLushaResponse(body, store) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SALES NAV PARSER — v2.6.0 (FULL RECORD EXTRACTION)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Extracts:
+//   - firstName, lastName, fullName (cleaned via nameCleaner)
+//   - about (summary), premium, degree
+//   - title, companyName (from currentPositions[0])
+//   - position_current, position_recipeType
+//   - position_start_month, position_start_year
+//   - tenureAtPosition_years, tenureAtPosition_months
+//   - tenureAtCompany_years, tenureAtCompany_months
+//   - personSalesUrl, companyLinkedin
+//   - city, state, country (from geoRegion)
+//   - companyFullAddress, companyCity, companyState, companyCountry (from company location)
+//   - industry (from companyUrnResolutionResult)
+// ═══════════════════════════════════════════════════════════════════════════════
 function parseSalesNavResponse(body, store) {
     try {
         const elements = body.elements || body.data || body.results || [];
         if (!Array.isArray(elements)) return;
 
-        const locations = [];
+        const records   = [];
+        const locations = [];  // backward-compat for enrichLocation
         const seen = new Set();
 
         for (const item of elements) {
             if (!item) continue;
 
-            const rawName = (item.fullName || '').trim();
-            if (!rawName) continue;
+            const rawFirstName = (item.firstName || '').trim();
+            const rawLastName  = (item.lastName || '').trim();
+            const rawFullName  = (item.fullName || '').trim();
 
+            if (!rawFullName && !rawFirstName) continue;
+
+            // Clean the full name (removes credentials, suffixes etc.)
+            const cleanedFull = cleanName(rawFullName);
+            if (!cleanedFull) continue;
+
+            const key = cleanedFull.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            // Split cleaned name into first/last
+            const nameParts = cleanedFull.split(/\s+/);
+            const firstName = nameParts[0] || rawFirstName;
+            const lastName  = nameParts.slice(1).join(' ') || '';
+
+            // ── About (summary) ────────────────────────────────────────
+            const about = (item.summary || '').replace(/[\r\n]+/g, ' ').trim();
+
+            // ── Premium & Degree ───────────────────────────────────────
+            const premium = item.premium ? 'Yes' : 'No';
+            const degree  = item.degree != null ? String(item.degree) : '';
+
+            // ── Current Position ────────────────────────────────────────
+            const pos = Array.isArray(item.currentPositions) ? item.currentPositions[0] : null;
+            const title       = (pos?.title || '').trim();
+            const companyName = (pos?.companyName || '').trim();
+
+            const position_current    = pos?.current ? 'Yes' : '';
+            const position_recipeType = (pos?.$recipeType || '').trim();
+            const position_start_month = pos?.startedOn?.month != null ? String(pos.startedOn.month) : '';
+            const position_start_year  = pos?.startedOn?.year  != null ? String(pos.startedOn.year)  : '';
+
+            // ── Tenure ─────────────────────────────────────────────────
+            const tenureAtPosition_years  = pos?.tenureAtPosition?.numYears  != null ? String(pos.tenureAtPosition.numYears)  : '';
+            const tenureAtPosition_months = pos?.tenureAtPosition?.numMonths != null ? String(pos.tenureAtPosition.numMonths) : '';
+            const tenureAtCompany_years   = pos?.tenureAtCompany?.numYears   != null ? String(pos.tenureAtCompany.numYears)   : '';
+            const tenureAtCompany_months  = pos?.tenureAtCompany?.numMonths  != null ? String(pos.tenureAtCompany.numMonths)  : '';
+
+            // ── Person Location (geoRegion) ────────────────────────────
             const geoRegion = (item.geoRegion || '').trim();
+            const personLoc = parseLocation(geoRegion);
 
+            // ── Person Sales Nav URL ───────────────────────────────────
             let personSalesUrl = '';
             const entityUrn = (item.entityUrn || '').trim();
             if (entityUrn) {
@@ -333,29 +386,69 @@ function parseSalesNavResponse(body, store) {
                 if (m && m[1]) personSalesUrl = `https://www.linkedin.com/sales/lead/${m[1]}`;
             }
 
+            // ── Company LinkedIn & Location ────────────────────────────
             let companyLinkedin = '';
             let companyLocationRaw = '';
-            const pos = Array.isArray(item.currentPositions) ? item.currentPositions[0] : null;
+            let companyIndustry = '';
             const companyUrn = (pos?.companyUrn || '').trim();
             if (companyUrn) {
                 const cm = companyUrn.match(/:(\d+)$/);
                 if (cm && cm[1]) companyLinkedin = `https://www.linkedin.com/sales/company/${cm[1]}`;
             }
-            companyLocationRaw = (pos?.companyUrnResolutionResult?.location || '').trim();
+            const companyRes = pos?.companyUrnResolutionResult;
+            companyLocationRaw = (companyRes?.location || '').trim();
+            companyIndustry    = (companyRes?.industry || '').trim();
 
-            const name = cleanName(rawName);
-            if (!name) continue;
+            const companyLoc = parseLocation(companyLocationRaw);
 
-            const key = name.toLowerCase();
-            if (seen.has(key)) continue;
-            seen.add(key);
+            // ── Build record ───────────────────────────────────────────
+            records.push({
+                firstName,
+                lastName,
+                fullName: cleanedFull,
+                title,
+                companyName,
+                about,
+                premium,
+                degree,
+                position_current:    position_current,
+                position_recipeType: position_recipeType,
+                position_start_month,
+                position_start_year,
+                tenureAtPosition_years,
+                tenureAtPosition_months,
+                tenureAtCompany_years,
+                tenureAtCompany_months,
+                // Person location from geoRegion
+                city:    personLoc.city,
+                state:   personLoc.state,
+                country: personLoc.country,
+                // Sales Nav URLs
+                personSalesUrl,
+                companyLinkedin,
+                // Company location
+                companyFullAddress: companyLocationRaw,
+                companyCity:        companyLoc.city,
+                companyState:       companyLoc.state,
+                companyCountry:     companyLoc.country,
+                // Industry from Sales Nav
+                industry: companyIndustry,
+            });
 
-            locations.push({ name, location: geoRegion, personSalesUrl, companyLinkedin, companyLocationRaw });
+            // Also push to locations array (backward compat)
+            locations.push({
+                name: cleanedFull,
+                location: geoRegion,
+                personSalesUrl,
+                companyLinkedin,
+                companyLocationRaw,
+            });
         }
 
-        if (locations.length > 0) {
+        if (records.length > 0) {
+            store._latestSalesNavRecords = records;
             store._latestSalesNav = locations;
-            console.log(`🟢 [Sales Nav] Captured ${locations.length} entries`);
+            console.log(`🟢 [Sales Nav] Captured ${records.length} full records (page ${store.currentPage})`);
         }
     } catch (err) {
         console.log(`⚠️ [Sales Nav] Parse error: ${err.message}`);

@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 TASK: Generate CSV + Styled XLSX — v2.5.0
+// 📊 TASK: Generate CSV + Styled XLSX — v2.6.0
 // ═══════════════════════════════════════════════════════════════════════════════
-// Added: "Person LinkedIn Url" column from Lusha socialLink (v2.5.0)
+// v2.6.0: Added Sales Nav enrichment columns:
+//   About, Premium, Degree, Position Current, Position RecipeType,
+//   Position Start Month/Year, Tenure at Position/Company Years/Months
 // ═══════════════════════════════════════════════════════════════════════════════
 
 'use strict';
@@ -11,38 +13,48 @@ const path = require('path');
 const { parse } = require('json2csv');
 const { buildXlsx } = require('./xlsxWriter');
 
-// ── Column definitions (v2.5.0) ───────────────────────────────────────────────
-// NEW: "Person LinkedIn Url" added — sourced from Lusha socialLink
+// ── Column definitions (v2.6.0) ───────────────────────────────────────────────
 const COLUMNS = [
-    { label: 'Company Name',         key: 'companyName' },
-    { label: 'First Name',           key: 'firstName' },
-    { label: 'Last Name',            key: 'lastName' },
-    { label: 'Job Title',            key: 'title' },
-    { label: 'Department',           key: 'department' },
-    { label: 'Job Function',         key: 'jobFunction' },
-    { label: 'Person Sales Url',     key: 'personSalesUrl' },
-    { label: 'Person LinkedIn Url',  key: 'personLinkedinUrl' },   // ← NEW (Lusha)
-    { label: 'City',                 key: 'city' },
-    { label: 'State',                key: 'state' },
-    { label: 'Country',              key: 'country' },
-    { label: 'Email Domain',         key: 'emailDomain' },
-    { label: 'Company Website',      key: 'companyWebsite' },
-    { label: 'Company Linkedin',     key: 'companyLinkedin' },
-    { label: 'Industry',             key: 'industry' },
-    { label: 'Employee Count',       key: 'employeeCount' },
-    { label: 'Employee Range',       key: 'employeeRange' },
-    { label: 'Company Full Address', key: 'companyFullAddress' },
-    { label: 'Company Street',       key: 'companyStreet' },
-    { label: 'Company City',         key: 'companyCity' },
-    { label: 'Company Zip',          key: 'companyZip' },
-    { label: 'Company State',        key: 'companyState' },
-    { label: 'Company Country',      key: 'companyCountry' },
-    { label: 'Company Phone',        key: 'companyPhone' },
-    { label: 'Company Fax',          key: 'companyFax' },
-    { label: 'Company Description',  key: 'companyDescription' },
-    { label: 'Revenue',              key: 'revenue' },
-    { label: 'Alexa Rank',           key: 'alexaRank' },
-    { label: 'Similar Company',      key: 'topCompetitorName' },
+    { label: 'Company Name',              key: 'companyName' },
+    { label: 'First Name',                key: 'firstName' },
+    { label: 'Last Name',                 key: 'lastName' },
+    { label: 'Job Title',                 key: 'title' },
+    { label: 'About',                     key: 'about' },                   // ← NEW
+    { label: 'Premium',                   key: 'premium' },                 // ← NEW
+    { label: 'Degree',                    key: 'degree' },                  // ← NEW
+    { label: 'Position Current',          key: 'position_current' },        // ← NEW
+    { label: 'Position RecipeType',       key: 'position_recipeType' },     // ← NEW
+    { label: 'Position Start Month',      key: 'position_start_month' },    // ← NEW
+    { label: 'Position Start Year',       key: 'position_start_year' },     // ← NEW
+    { label: 'Tenure Position Years',     key: 'tenureAtPosition_years' },  // ← NEW
+    { label: 'Tenure Position Months',    key: 'tenureAtPosition_months' }, // ← NEW
+    { label: 'Tenure Company Years',      key: 'tenureAtCompany_years' },   // ← NEW
+    { label: 'Tenure Company Months',     key: 'tenureAtCompany_months' },  // ← NEW
+    { label: 'Department',                key: 'department' },
+    { label: 'Job Function',              key: 'jobFunction' },
+    { label: 'Person Sales Url',          key: 'personSalesUrl' },
+    { label: 'Person LinkedIn Url',       key: 'personLinkedinUrl' },
+    { label: 'City',                      key: 'city' },
+    { label: 'State',                     key: 'state' },
+    { label: 'Country',                   key: 'country' },
+    { label: 'Email Domain',              key: 'emailDomain' },
+    { label: 'Company Website',           key: 'companyWebsite' },
+    { label: 'Company Linkedin',          key: 'companyLinkedin' },
+    { label: 'Industry',                  key: 'industry' },
+    { label: 'Employee Count',            key: 'employeeCount' },
+    { label: 'Employee Range',            key: 'employeeRange' },
+    { label: 'Company Full Address',      key: 'companyFullAddress' },
+    { label: 'Company Street',            key: 'companyStreet' },
+    { label: 'Company City',              key: 'companyCity' },
+    { label: 'Company Zip',               key: 'companyZip' },
+    { label: 'Company State',             key: 'companyState' },
+    { label: 'Company Country',           key: 'companyCountry' },
+    { label: 'Company Phone',             key: 'companyPhone' },
+    { label: 'Company Fax',               key: 'companyFax' },
+    { label: 'Company Description',       key: 'companyDescription' },
+    { label: 'Revenue',                   key: 'revenue' },
+    { label: 'Alexa Rank',                key: 'alexaRank' },
+    { label: 'Similar Company',           key: 'topCompetitorName' },
 ];
 
 const CSV_FIELDS = COLUMNS.map(c => c.label);
