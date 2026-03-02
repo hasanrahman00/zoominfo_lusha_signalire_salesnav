@@ -365,6 +365,9 @@ function parseSalesNavResponse(body, store) {
             const position_start_month = pos?.startedOn?.month != null ? String(pos.startedOn.month) : '';
             const position_start_year  = pos?.startedOn?.year  != null ? String(pos.startedOn.year)  : '';
 
+            // ── Company Description (from position) ───────────────────
+            const companyDescription = (pos?.description || '').replace(/[\r\n]+/g, ' ').trim();
+
             // ── Person Location (geoRegion) ────────────────────────────
             const geoRegion = (item.geoRegion || '').trim();
             const personLoc = parseLocation(geoRegion);
@@ -417,8 +420,9 @@ function parseSalesNavResponse(body, store) {
                 companyCity:        companyLoc.city,
                 companyState:       companyLoc.state,
                 companyCountry:     companyLoc.country,
-                // Industry from Sales Nav
+                // Industry & description from Sales Nav
                 industry: companyIndustry,
+                companyDescription,
             });
 
             // Also push to locations array (backward compat)
