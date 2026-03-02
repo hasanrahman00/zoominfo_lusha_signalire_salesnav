@@ -48,8 +48,6 @@ const COLUMNS = [
     { label: 'Company Phone',             key: 'companyPhone' },
     { label: 'Company Description',       key: 'companyDescription' },
     { label: 'Revenue',                   key: 'revenue' },
-    { label: 'Alexa Rank',                key: 'alexaRank' },
-    { label: 'Similar Company',           key: 'topCompetitorName' },
 ];
 
 const CSV_FIELDS = COLUMNS.map(c => c.label);
