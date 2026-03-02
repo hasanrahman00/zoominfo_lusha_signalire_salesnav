@@ -136,7 +136,7 @@ const { PageTracker }               = require('./tasks/pageTracker');
                 else console.log('⚠️ Sales Nav data not captured — will use ZoomInfo only');
             } else { console.log('✅ Sales Nav data available'); }
 
-            // ── ZoomInfo wait (poll 500ms × 8 = 4s, then retry + 3s) ──
+            // ── ZoomInfo wait (poll 500ms × 8 = 4s, retry badge + 3s, then 2nd layer up to 30s) ──
             let ziReady = captureStore.getCurrent().zoominfo.length > 0;
             if (!ziReady) {
                 for (let w = 0; w < 8; w++) {
@@ -150,9 +150,22 @@ const { PageTracker }               = require('./tasks/pageTracker');
                         await page.waitForTimeout(500);
                         if (captureStore.getCurrent().zoominfo.length > 0) { ziReady = true; break; }
                     }
-                    if (!ziReady) { console.log('⚠️ ZoomInfo missing'); tracker.note(pageNum, 'ZoomInfo missing'); }
-                    else { console.log('✅ ZoomInfo arrived on retry'); }
                 }
+                // ── 2nd layer: extended wait up to 30s total (network slow) ──
+                if (!ziReady) {
+                    console.log('⚠️ ZoomInfo still missing — 2nd layer: waiting up to 30s...');
+                    await minimizeZoomInfo(page);
+                    await page.waitForTimeout(500);
+                    await activateZoomInfo(page);
+                    const ziStart = Date.now();
+                    while (!ziReady && (Date.now() - ziStart) < 30000) {
+                        await page.waitForTimeout(1000);
+                        if (captureStore.getCurrent().zoominfo.length > 0) { ziReady = true; break; }
+                    }
+                    if (!ziReady) { console.log('⚠️ ZoomInfo missing after 30s'); tracker.note(pageNum, 'ZoomInfo missing'); }
+                    else { console.log('✅ ZoomInfo arrived on 2nd layer retry'); }
+                }
+                if (ziReady && !console._ziLogged) { console.log('✅ ZoomInfo arrived on retry'); }
             } else { console.log('✅ ZoomInfo data available'); }
 
             // ── Lusha wait (longer: poll 500ms × 16 = 8s, then retry + 6s) ──

@@ -311,10 +311,8 @@ function parseLushaResponse(body, store) {
 //   - firstName, lastName, fullName (cleaned via nameCleaner)
 //   - about (summary), premium, degree
 //   - title, companyName (from currentPositions[0])
-//   - position_current, position_recipeType
+//   - position_current
 //   - position_start_month, position_start_year
-//   - tenureAtPosition_years, tenureAtPosition_months
-//   - tenureAtCompany_years, tenureAtCompany_months
 //   - personSalesUrl, companyLinkedin
 //   - city, state, country (from geoRegion)
 //   - companyFullAddress, companyCity, companyState, companyCountry (from company location)
@@ -364,15 +362,8 @@ function parseSalesNavResponse(body, store) {
             const companyName = (pos?.companyName || '').trim();
 
             const position_current    = pos?.current ? 'Yes' : '';
-            const position_recipeType = (pos?.$recipeType || '').trim();
             const position_start_month = pos?.startedOn?.month != null ? String(pos.startedOn.month) : '';
             const position_start_year  = pos?.startedOn?.year  != null ? String(pos.startedOn.year)  : '';
-
-            // ── Tenure ─────────────────────────────────────────────────
-            const tenureAtPosition_years  = pos?.tenureAtPosition?.numYears  != null ? String(pos.tenureAtPosition.numYears)  : '';
-            const tenureAtPosition_months = pos?.tenureAtPosition?.numMonths != null ? String(pos.tenureAtPosition.numMonths) : '';
-            const tenureAtCompany_years   = pos?.tenureAtCompany?.numYears   != null ? String(pos.tenureAtCompany.numYears)   : '';
-            const tenureAtCompany_months  = pos?.tenureAtCompany?.numMonths  != null ? String(pos.tenureAtCompany.numMonths)  : '';
 
             // ── Person Location (geoRegion) ────────────────────────────
             const geoRegion = (item.geoRegion || '').trim();
@@ -412,13 +403,8 @@ function parseSalesNavResponse(body, store) {
                 premium,
                 degree,
                 position_current:    position_current,
-                position_recipeType: position_recipeType,
                 position_start_month,
                 position_start_year,
-                tenureAtPosition_years,
-                tenureAtPosition_months,
-                tenureAtCompany_years,
-                tenureAtCompany_months,
                 // Person location from geoRegion
                 city:    personLoc.city,
                 state:   personLoc.state,

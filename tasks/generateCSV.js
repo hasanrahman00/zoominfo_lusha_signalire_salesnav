@@ -2,8 +2,9 @@
 // 📊 TASK: Generate CSV + Styled XLSX — v2.6.0
 // ═══════════════════════════════════════════════════════════════════════════════
 // v2.6.0: Added Sales Nav enrichment columns:
-//   About, Premium, Degree, Position Current, Position RecipeType,
-//   Position Start Month/Year, Tenure at Position/Company Years/Months
+//   About, Premium, Degree, Position Current,
+//   Position Start Month/Year
+// Removed: Position RecipeType, Tenure Position/Company Years/Months
 // ═══════════════════════════════════════════════════════════════════════════════
 
 'use strict';
@@ -23,13 +24,8 @@ const COLUMNS = [
     { label: 'Premium',                   key: 'premium' },                 // ← NEW
     { label: 'Degree',                    key: 'degree' },                  // ← NEW
     { label: 'Position Current',          key: 'position_current' },        // ← NEW
-    { label: 'Position RecipeType',       key: 'position_recipeType' },     // ← NEW
     { label: 'Position Start Month',      key: 'position_start_month' },    // ← NEW
     { label: 'Position Start Year',       key: 'position_start_year' },     // ← NEW
-    { label: 'Tenure Position Years',     key: 'tenureAtPosition_years' },  // ← NEW
-    { label: 'Tenure Position Months',    key: 'tenureAtPosition_months' }, // ← NEW
-    { label: 'Tenure Company Years',      key: 'tenureAtCompany_years' },   // ← NEW
-    { label: 'Tenure Company Months',     key: 'tenureAtCompany_months' },  // ← NEW
     { label: 'Department',                key: 'department' },
     { label: 'Job Function',              key: 'jobFunction' },
     { label: 'Person Sales Url',          key: 'personSalesUrl' },
