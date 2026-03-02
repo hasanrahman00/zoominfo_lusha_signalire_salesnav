@@ -99,7 +99,7 @@ function mergePageData(pageData) {
         }
 
         return record;
-    });
+    }).filter(r => r.personSalesUrl || r.personLinkedinUrl);
 
     // ══════════════════════════════════════════════════════════════════════
     // STEP 4: Add any UNMATCHED ZoomInfo records (people not in Sales Nav)
@@ -135,6 +135,9 @@ function mergePageData(pageData) {
                 record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
             }
         }
+
+        // Skip profiles without any Sales Nav or LinkedIn URL (duplicates/limited info)
+        if (!record.personSalesUrl && !record.personLinkedinUrl) continue;
 
         merged.push(record);
         unmatchedAdded++;
