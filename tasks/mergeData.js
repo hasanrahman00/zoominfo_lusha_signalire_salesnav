@@ -90,6 +90,11 @@ function mergePageData(pageData) {
         record.emailDomain       = lushaMatch.domain;
         record.personLinkedinUrl = lushaMatch.personLinkedinUrl;
 
+        // Fallback: convert Sales Nav URL → LinkedIn profile URL if Lusha didn't provide one
+        if (!record.personLinkedinUrl && record.personSalesUrl) {
+            record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
+        }
+
         return record;
     });
 
@@ -120,6 +125,11 @@ function mergePageData(pageData) {
         const lushaMatch = matchLushaRecord(record, lusha, lushaMatched);
         record.emailDomain       = lushaMatch.domain;
         record.personLinkedinUrl = lushaMatch.personLinkedinUrl;
+
+        // Fallback: convert Sales Nav URL → LinkedIn profile URL if Lusha didn't provide one
+        if (!record.personLinkedinUrl && record.personSalesUrl) {
+            record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
+        }
 
         merged.push(record);
         unmatchedAdded++;

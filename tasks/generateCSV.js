@@ -46,7 +46,6 @@ const COLUMNS = [
     { label: 'Company State',             key: 'companyState' },
     { label: 'Company Country',           key: 'companyCountry' },
     { label: 'Company Phone',             key: 'companyPhone' },
-    { label: 'Company Fax',               key: 'companyFax' },
     { label: 'Company Description',       key: 'companyDescription' },
     { label: 'Revenue',                   key: 'revenue' },
     { label: 'Alexa Rank',                key: 'alexaRank' },
