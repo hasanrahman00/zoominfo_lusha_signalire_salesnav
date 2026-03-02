@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// ⚙️ CONFIGURATION FILE
+// ⚙️ CONFIGURATION FILE — v2.5.0
 // ═══════════════════════════════════════════════════════════════════════════════
 
 process.env.PW_CHROMIUM_ATTACH_TO_OTHER = '1';
@@ -32,15 +32,19 @@ module.exports = {
 
     MAX_PAGES: 100,
 
+    // ── Human-like scroll settings (v2.5.0 — slower & more natural) ──────
     SCROLL_OPTIONS: {
         trackerSelector: "a[data-control-name^='view_lead_panel']",
-        minSteps: 8,
-        maxSteps: 12,
-        stepPx: 450,
-        minDelayMs: 300,
-        maxDelayMs: 700,
-        maxRounds: 25,
-        bottomStallLimit: 3,
+        minSteps: 12,           // was 8  — more scroll increments
+        maxSteps: 18,           // was 12 — more scroll increments
+        stepPx: 280,            // was 450 — smaller steps = more human
+        minDelayMs: 500,        // was 300 — slower between steps
+        maxDelayMs: 1200,       // was 700 — more variation in speed
+        maxRounds: 30,          // was 25 — allow more scroll rounds
+        bottomStallLimit: 4,    // was 3  — more patience at bottom
+        pauseChance: 0.25,      // NEW: 25% chance of random mid-scroll pause
+        pauseMinMs: 800,        // NEW: min pause duration
+        pauseMaxMs: 2500,       // NEW: max pause duration
     },
 
     // Network URLs to intercept

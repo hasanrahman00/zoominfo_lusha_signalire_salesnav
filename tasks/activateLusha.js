@@ -1,9 +1,10 @@
-// ═════════════════════════════════════════════════════════════════
-// 🎯 TASK: Activate & Minimize Lusha Extension
-// ═════════════════════════════════════════════════════════════════
-// Purpose: Open Lusha sidebar (data loads in background) + minimize
-// Data persists in iframe even after minimize — extract later.
-// ═════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🎯 TASK: Activate & Minimize Lusha Extension — v2.5.0
+// ═══════════════════════════════════════════════════════════════════════════════
+// Purpose: Click Lusha badge to trigger the API call (network captured).
+// v2.5.0: Data is now captured via network interception in setupNetworkCapture.
+//         No more DOM extraction — we just need to trigger and minimize.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 async function activateLusha(page) {
     console.log('🔵 [Lusha] Activating extension...');
@@ -29,7 +30,7 @@ async function activateLusha(page) {
                             el.click();
                         }
                     }, selector);
-                    console.log('✅ [Lusha] Badge clicked');
+                    console.log('✅ [Lusha] Badge clicked — API triggered');
                     clicked = true;
                     break;
                 }
@@ -41,8 +42,7 @@ async function activateLusha(page) {
             return false;
         }
 
-        // Poll for iframe to be ready (300ms intervals, max 1.5s)
-        // instead of fixed 1.5s wait
+        // Wait briefly for iframe to appear (network response captured passively)
         for (let i = 0; i < 5; i++) {
             await page.waitForTimeout(300);
             const frames = page.frames();
@@ -68,7 +68,7 @@ async function activateLusha(page) {
 
 async function minimizeLusha(page) {
     try {
-        // Method 1: Fast script click inside Lusha iframe
+        // Method 1: Click minimize inside Lusha iframe
         const frames = page.frames();
         for (const frame of frames) {
             try {
@@ -98,7 +98,7 @@ async function minimizeLusha(page) {
             } catch {}
         }
 
-        // Method 2: Try iframe by element ID
+        // Method 2: iframe by element ID
         try {
             const el = await page.$('iframe#LU__extension_iframe');
             if (el) {

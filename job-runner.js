@@ -1,21 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎬 JOB RUNNER — VikiLeads v2.4.0
+// 🎬 JOB RUNNER — VikiLeads v2.5.1
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // FLOW (per page):
-//   1. Scroll dashboard (background)
-//   2. Activate Lusha + ZoomInfo (parallel)
-//   3. Wait for scroll + ZoomInfo network
-//   4. Extract Lusha + Minimize sidebars
-//   5. Merge ZoomInfo (network) + Lusha (DOM) + Sales Nav locations
+//   1. Scroll dashboard (background — steady human speed)
+//   2. Activate Lusha + ZoomInfo (parallel — triggers API calls)
+//   3. Wait for scroll + network responses (ZoomInfo + Lusha via CDP)
+//   4. Minimize sidebars
+//   5. Merge all 3 sources (network captured)
 //   6. Save JSONL + generate CSV/XLSX
 //   7. Navigate to next page
 //
-// PAGE TRACKER:
-//   Logs every page start/extract/merge/save/navigate to pageTracker.json
-//   Detects skipped pages, double-navigation, unsaved pages
-//   Prints summary at end of run
-//
+// v2.5.1: Browser CDP for Lusha service worker capture
+//         Steady scroll (no random pauses)
+//         Longer Lusha wait (up to 8s + retry)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 process.env.PW_CHROMIUM_ATTACH_TO_OTHER = '1';
@@ -42,9 +40,8 @@ const { scrollDashboardPage }       = require('./tasks/scrollDashboard');
 const { getCurrentPageInfo }        = require('./tasks/getPageInfo');
 const { goToNextPage }              = require('./tasks/navigateNextPage');
 const { activateLusha, minimizeLusha }           = require('./tasks/activateLusha');
-const { activateZoomInfo, minimizeZoomInfo }     = require('./tasks/activateZoomInfo');
+const { activateZoomInfo, minimizeZoomInfo }      = require('./tasks/activateZoomInfo');
 const { setupNetworkCapture }       = require('./tasks/setupNetworkCapture');
-const { extractLushaContacts }      = require('./tasks/extractLusha');
 const { mergePageData }             = require('./tasks/mergeData');
 const { generateCSV }               = require('./tasks/generateCSV');
 const { PageTracker }               = require('./tasks/pageTracker');
@@ -63,7 +60,7 @@ const { PageTracker }               = require('./tasks/pageTracker');
 
     try {
         console.log('══════════════════════════════════════════');
-        console.log('🚀 JOB STARTING — Sales Nav Extraction');
+        console.log('🚀 JOB STARTING — VikiLeads v2.5.1');
         console.log(`📎 URL: ${JOB_URL.slice(0, 80)}...`);
         console.log(`📂 Output: ${JOB_DIR}`);
         if (START_PAGE > 0) console.log(`♻️ Resuming from page ${START_PAGE}`);
@@ -72,7 +69,9 @@ const { PageTracker }               = require('./tasks/pageTracker');
         await launchChrome(config.CHROME_PATH, config.PORT, config.USER_DATA_DIR);
         const { browser, context } = await connectToBrowser(config.CDP_URL);
         if (!fs.existsSync(LEADS_JSONL)) fs.writeFileSync(LEADS_JSONL, '');
-        const captureStore = await setupNetworkCapture(context);
+
+        // Pass browser for CDP-level Lusha capture
+        const captureStore = await setupNetworkCapture(context, browser);
 
         let navUrl = JOB_URL;
         if (START_PAGE > 1) {
@@ -96,37 +95,38 @@ const { PageTracker }               = require('./tasks/pageTracker');
             const pageNum   = currentPage;
             console.log(`\n📄 ═══ Page ${pageNum} ═══`);
 
-            // ── Page tracker: start ───────────────────────────────────
             tracker.pageStarted(pageNum);
-
             captureStore.setPage(pageNum);
             captureStore.clearCurrent();
 
             // ══════════════════════════════════════════════════════════
-            // SCROLL — background, ~5-7s, overlaps everything below
+            // SCROLL — background (steady human speed)
             // ══════════════════════════════════════════════════════════
             const scrollPromise = scrollDashboardPage(page, config.SCROLL_OPTIONS);
 
             // ══════════════════════════════════════════════════════════
-            // STEP 1: Lusha + ZoomInfo (parallel)
+            // STEP 1: Activate Lusha + ZoomInfo (parallel)
             // ══════════════════════════════════════════════════════════
-            console.log('⚡ [Step 1] Lusha + ZoomInfo...');
+            console.log('⚡ [Step 1] Lusha + ZoomInfo activation...');
             await Promise.allSettled([
                 activateLusha(page),
                 activateZoomInfo(page),
             ]);
 
             // ══════════════════════════════════════════════════════════
-            // Wait for scroll to finish (likely already done)
+            // Wait for scroll to finish
             // ══════════════════════════════════════════════════════════
             await scrollPromise;
 
             // ══════════════════════════════════════════════════════════
-            // ZoomInfo network wait (poll 500ms, max 3s + retry 3s)
+            // STEP 2: Wait for network responses
             // ══════════════════════════════════════════════════════════
+            console.log('⚡ [Step 2] Waiting for network responses...');
+
+            // ── ZoomInfo wait (poll 500ms × 8 = 4s, then retry + 3s) ──
             let ziReady = captureStore.getCurrent().zoominfo.length > 0;
             if (!ziReady) {
-                for (let w = 0; w < 6; w++) {
+                for (let w = 0; w < 8; w++) {
                     await page.waitForTimeout(500);
                     if (captureStore.getCurrent().zoominfo.length > 0) { ziReady = true; break; }
                 }
@@ -135,58 +135,63 @@ const { PageTracker }               = require('./tasks/pageTracker');
                     await activateZoomInfo(page);
                     for (let w = 0; w < 6; w++) {
                         await page.waitForTimeout(500);
-                        if (captureStore.getCurrent().zoominfo.length > 0) {
-                            ziReady = true;
-                            console.log('✅ ZoomInfo arrived on retry');
-                            break;
-                        }
+                        if (captureStore.getCurrent().zoominfo.length > 0) { ziReady = true; break; }
                     }
-                    if (!ziReady) {
-                        console.log('⚠️ ZoomInfo not received after retry');
-                        tracker.note(pageNum, 'ZoomInfo missing');
-                    }
+                    if (!ziReady) { console.log('⚠️ ZoomInfo missing'); tracker.note(pageNum, 'ZoomInfo missing'); }
+                    else { console.log('✅ ZoomInfo arrived on retry'); }
                 }
-            } else {
-                console.log('✅ ZoomInfo data available');
-            }
+            } else { console.log('✅ ZoomInfo data available'); }
+
+            // ── Lusha wait (longer: poll 500ms × 16 = 8s, then retry + 6s) ──
+            let luReady = captureStore.getCurrent().lusha.length > 0;
+            if (!luReady) {
+                // First wait — up to 8s (CDP capture may take longer)
+                for (let w = 0; w < 16; w++) {
+                    await page.waitForTimeout(500);
+                    if (captureStore.getCurrent().lusha.length > 0) { luReady = true; break; }
+                }
+                if (!luReady) {
+                    console.log('⚠️ Lusha not received — retrying badge...');
+                    await minimizeLusha(page);
+                    await page.waitForTimeout(500);
+                    await activateLusha(page);
+                    // Second wait — up to 6s
+                    for (let w = 0; w < 12; w++) {
+                        await page.waitForTimeout(500);
+                        if (captureStore.getCurrent().lusha.length > 0) { luReady = true; break; }
+                    }
+                    if (!luReady) { console.log('⚠️ Lusha missing after retry'); tracker.note(pageNum, 'Lusha missing'); }
+                    else { console.log('✅ Lusha arrived on retry'); }
+                }
+            } else { console.log('✅ Lusha data available'); }
 
             // ══════════════════════════════════════════════════════════
-            // STEP 2: Extract Lusha + Minimize all (parallel)
+            // STEP 3: Minimize sidebars
             // ══════════════════════════════════════════════════════════
-            console.log('⚡ [Step 2] Extract + Minimize...');
-
-            const [lushaResult] = await Promise.allSettled([
-                extractLushaContacts(page, {
-                    maxWaitSec:  4,
-                    maxCards:    25,
-                    maxRetries:  3,
-                }),
+            console.log('⚡ [Step 3] Minimizing sidebars...');
+            await Promise.allSettled([
                 minimizeLusha(page),
                 minimizeZoomInfo(page),
             ]);
 
-            const lushaContacts = lushaResult.status === 'fulfilled' ? lushaResult.value : [];
-
-            // ── Page tracker: extracted ───────────────────────────────
+            // ── Page tracker ──────────────────────────────────────────
             tracker.pageExtracted(pageNum, {
                 zi:    captureStore.getCurrent().zoominfo.length,
-                lusha: lushaContacts.length,
+                lusha: captureStore.getCurrent().lusha.length,
             });
 
             // ══════════════════════════════════════════════════════════
-            // Merge + Save
+            // STEP 4: Merge + Save
             // ══════════════════════════════════════════════════════════
             const salesNavLocs = captureStore.getSalesNavLocations();
 
             const pageData = {
                 zoominfo:          captureStore.getCurrent().zoominfo,
-                lusha:             lushaContacts,
+                lusha:             captureStore.getCurrent().lusha,
                 salesNavLocations: salesNavLocs,
             };
 
             const merged = mergePageData(pageData);
-
-            // ── Page tracker: merged ──────────────────────────────────
             tracker.pageMerged(pageNum, merged.length);
 
             if (merged.length > 0) {
@@ -202,7 +207,6 @@ const { PageTracker }               = require('./tasks/pageTracker');
             const elapsed = ((Date.now() - pageStart) / 1000).toFixed(1);
             console.log(`✅ Page ${pageNum} done — ${totalLeads} total — ${elapsed}s`);
 
-            // ── Page tracker: saved ───────────────────────────────────
             tracker.pageSaved(pageNum, totalLeads);
 
             if (stopRequested) break;
@@ -221,9 +225,7 @@ const { PageTracker }               = require('./tasks/pageTracker');
                 break;
             }
 
-            // ── Page tracker: navigated ───────────────────────────────
             tracker.pageNavigated(pageNum, nextResult.pageNumber);
-
             currentPage = nextResult.pageNumber;
 
             try {
@@ -244,9 +246,7 @@ const { PageTracker }               = require('./tasks/pageTracker');
             console.log(`📊 Final: ${Math.max(0, csvLines.length - 1)} leads in CSV`);
         } catch {}
 
-        // ── Final page tracker summary ────────────────────────────────
         tracker.summary();
-
         process.exit(0);
 
     } catch (error) {

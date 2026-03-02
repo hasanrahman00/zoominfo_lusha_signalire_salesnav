@@ -1,10 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 TASK: Generate CSV + Styled XLSX from Merged Data
+// 📊 TASK: Generate CSV + Styled XLSX — v2.5.0
 // ═══════════════════════════════════════════════════════════════════════════════
-// Outputs two files:
-//   leads.csv  — plain CSV (backward-compatible)
-//   leads.xlsx — styled Excel: colored header, alternating rows, frozen pane,
-//                auto column widths, bold/border formatting — zero extra deps
+// Added: "Person LinkedIn Url" column from Lusha socialLink (v2.5.0)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 'use strict';
@@ -14,13 +11,8 @@ const path = require('path');
 const { parse } = require('json2csv');
 const { buildXlsx } = require('./xlsxWriter');
 
-// ── Column definitions ────────────────────────────────────────────────────────
-// label  = CSV header / XLSX column header
-// key    = field name in the record object
-//
-// Removed columns : Full Name, Person Fax, Top Competitor ID
-// Renamed columns : Top Competitor Name → Similar Company
-// Order           : matches the agreed output spec
+// ── Column definitions (v2.5.0) ───────────────────────────────────────────────
+// NEW: "Person LinkedIn Url" added — sourced from Lusha socialLink
 const COLUMNS = [
     { label: 'Company Name',         key: 'companyName' },
     { label: 'First Name',           key: 'firstName' },
@@ -29,6 +21,7 @@ const COLUMNS = [
     { label: 'Department',           key: 'department' },
     { label: 'Job Function',         key: 'jobFunction' },
     { label: 'Person Sales Url',     key: 'personSalesUrl' },
+    { label: 'Person LinkedIn Url',  key: 'personLinkedinUrl' },   // ← NEW (Lusha)
     { label: 'City',                 key: 'city' },
     { label: 'State',                key: 'state' },
     { label: 'Country',              key: 'country' },
@@ -56,8 +49,6 @@ const CSV_FIELDS = COLUMNS.map(c => c.label);
 
 /**
  * Convert JSONL file → leads.csv + leads.xlsx with enforced column order.
- * @param {string} inputFile   path to leads.jsonl
- * @param {string} outputFile  path to leads.csv (xlsx written alongside)
  */
 async function generateCSV(inputFile, outputFile) {
     console.log('📊 Generating CSV + XLSX...');
