@@ -87,12 +87,15 @@ function mergePageData(pageData) {
         // STEP 3: Match Lusha → get domain + personLinkedinUrl
         // ══════════════════════════════════════════════════════════════════
         const lushaMatch = matchLushaRecord(record, lusha, lushaMatched);
-        record.emailDomain       = lushaMatch.domain;
-        record.personLinkedinUrl = lushaMatch.personLinkedinUrl;
+        record.emailDomain = lushaMatch.domain;
 
-        // Fallback: convert Sales Nav URL → LinkedIn profile URL if Lusha didn't provide one
-        if (!record.personLinkedinUrl && record.personSalesUrl) {
-            record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
+        // Only set personLinkedinUrl if record has a personSalesUrl (skip duplicates)
+        if (record.personSalesUrl) {
+            record.personLinkedinUrl = lushaMatch.personLinkedinUrl;
+            // Fallback: convert Sales Nav URL → LinkedIn profile URL if Lusha didn't provide one
+            if (!record.personLinkedinUrl) {
+                record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
+            }
         }
 
         return record;
@@ -123,12 +126,14 @@ function mergePageData(pageData) {
 
         // Match Lusha
         const lushaMatch = matchLushaRecord(record, lusha, lushaMatched);
-        record.emailDomain       = lushaMatch.domain;
-        record.personLinkedinUrl = lushaMatch.personLinkedinUrl;
+        record.emailDomain = lushaMatch.domain;
 
-        // Fallback: convert Sales Nav URL → LinkedIn profile URL if Lusha didn't provide one
-        if (!record.personLinkedinUrl && record.personSalesUrl) {
-            record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
+        // Only set personLinkedinUrl if record has a personSalesUrl (skip duplicates)
+        if (record.personSalesUrl) {
+            record.personLinkedinUrl = lushaMatch.personLinkedinUrl;
+            if (!record.personLinkedinUrl) {
+                record.personLinkedinUrl = record.personSalesUrl.replace('/sales/lead/', '/in/');
+            }
         }
 
         merged.push(record);
