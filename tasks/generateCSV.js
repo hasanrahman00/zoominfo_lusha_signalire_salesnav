@@ -16,6 +16,7 @@ const { buildXlsx } = require('./xlsxWriter');
 
 // ── Column definitions (v2.6.0) ───────────────────────────────────────────────
 const COLUMNS = [
+    { label: 'Company Urn',               key: 'companyUrn' },
     { label: 'Company Name',              key: 'companyName' },
     { label: 'First Name',                key: 'firstName' },
     { label: 'Last Name',                 key: 'lastName' },
@@ -83,6 +84,11 @@ async function generateCSV(inputFile, outputFile) {
             const key = (record.fullName || '').toLowerCase().trim();
             if (key && seen.has(key)) continue;
             if (key) seen.add(key);
+
+            // Derive Company Urn from Company Linkedin URL
+            const linkedinUrl = record.companyLinkedin || '';
+            const urnMatch = linkedinUrl.match(/\/(\d+)$/);
+            record.companyUrn = urnMatch ? urnMatch[1] : '';
 
             const row = {};
             for (const col of COLUMNS) {
