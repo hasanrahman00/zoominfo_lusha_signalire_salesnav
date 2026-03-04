@@ -51,7 +51,7 @@ module.exports = {
     NETWORK_URLS: {
         LUSHA: 'plugin-services.lusha.com/api/v2/search',
         ZOOMINFO: 'app.zoominfo.com/ziapi/reachout-api-plg/api/v1/plg-match/peopleMatchBulk',
-        SALESNAV: 'linkedin.com/sales-api/salesApiLeadSearch?q=searchQuery',
+        SALESNAV: 'linkedin.com/sales-api/salesApiLeadSearch',
     },
 
     SETTINGS_FILE,

@@ -106,6 +106,7 @@ function mergePageData(pageData) {
     // These might appear if Sales Nav didn't capture all leads on the page
     // ══════════════════════════════════════════════════════════════════════
     let unmatchedAdded = 0;
+    const hasSalesNavBase = salesNavRecords.length > 0;
     for (let i = 0; i < zoominfo.length; i++) {
         if (ziMatched.has(i)) continue;
         const zi = zoominfo[i];
@@ -136,8 +137,9 @@ function mergePageData(pageData) {
             }
         }
 
-        // Skip profiles without any Sales Nav or LinkedIn URL (duplicates/limited info)
-        if (!record.personSalesUrl && !record.personLinkedinUrl) continue;
+        // When Sales Nav base is present, keep previous behavior to avoid loose unmatched records.
+        // If Sales Nav is missing entirely, allow ZoomInfo-only fallback rows so exports still have data.
+        if (hasSalesNavBase && !record.personSalesUrl && !record.personLinkedinUrl) continue;
 
         merged.push(record);
         unmatchedAdded++;

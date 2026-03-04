@@ -72,7 +72,7 @@ async function setupNetworkCapture(context, browser) {
                         }
                     }
 
-                    if (url.includes(config.NETWORK_URLS.SALESNAV)) {
+                    if (isSalesNavLeadSearchUrl(url)) {
                         const body = await response.json().catch(() => null);
                         if (body) parseSalesNavResponse(body, captureStore);
                     }
@@ -188,6 +188,19 @@ async function setupNetworkCapture(context, browser) {
     }
 
     return captureStore;
+}
+
+function isSalesNavLeadSearchUrl(url) {
+    if (!url) return false;
+
+    if (config.NETWORK_URLS?.SALESNAV && url.includes(config.NETWORK_URLS.SALESNAV)) {
+        return true;
+    }
+
+    return (
+        url.includes('linkedin.com/sales-api/salesApiLeadSearch') ||
+        url.includes('/sales-api/salesApiLeadSearch')
+    );
 }
 
 
